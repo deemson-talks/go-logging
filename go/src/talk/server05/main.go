@@ -8,9 +8,9 @@ import (
 	"math/rand"
 	"time"
 	"github.com/go-chi/chi/middleware"
+	"github.com/rs/zerolog/log"
 	"github.com/rs/zerolog"
 	"os"
-	"github.com/rs/zerolog/log"
 )
 
 func main() {
@@ -22,22 +22,22 @@ func main() {
 
 		reqID := middleware.GetReqID(r.Context())
 		log := log.With().Str("reqID", reqID).Logger()
-		log.Print("Choosing fruit to eat")
+		log.Info().Msg("Choosing")
 		fruit := fruits.ChooseRandom()
 		time.Sleep(time.Millisecond * time.Duration(10+rnd.Intn(10)))
 
 		log = log.With().Str("fruit", fruit).Logger()
-		log.Print("chosen")
+		log.Info().Msg("Chosen")
 		result, err := fruits.Eat(fruit)
 		time.Sleep(time.Millisecond * time.Duration(10+rnd.Intn(10)))
 
 		if err != nil {
-			log.Printf(`Error eating: %v`, err)
+			log.Error().Err(err).Msg("Failed")
 			w.Write([]byte(fmt.Sprintf(`failed eating "%s": "%s"`, fruit, err)))
 			return
 		}
 
-		log.Printf(`Yum %s`, result)
+		log.Info().Str("result", result).Msg("Yum")
 		w.Write([]byte(fmt.Sprintf(`ate "%s": "%s"`, fruit, result)))
 	})
 	err := http.ListenAndServe(":3333", r)

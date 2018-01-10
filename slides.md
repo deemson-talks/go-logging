@@ -13,12 +13,44 @@ Dmytro Kurkin
 
 ---
 
-Best practices (Peter Bourgon):
+### Principles:
+
+- Easy to reconfigure
+- Easy to read & navigate
+
+---
+
+Easy to reconfigure
+
+==
+
+Configuration is located in one place
+
+==
+
+DRY
+
+---
+
+Easy to read & navigate
+
+==
+
+Easy to find the information you need if you know the context
+
+---
+
+### Best practices (Peter Bourgon):
 
 - Log only actionable information, which will be read by a human or a machine
 - Avoid fine-grained log levels — info and debug are probably enough
 - Use structured logging
 - Loggers are dependencies!
+
+---
+
+
+### Use structured logging
 
 ---
 
@@ -29,6 +61,10 @@ log.Printf("HTTP server listening on %s", addr)
 // Structured
 logger.Log("transport", "HTTP", "addr", addr, "msg", "listening")
 ```
+
+---
+
+### << Rewind
 
 ---
 
@@ -164,48 +200,7 @@ When the server is under the load the logs are garbled
 
 ---
 
-Fix? Pass the param to each log.Print call?
-
-```Go
-log.Print(`Choosing fruit to eat`)
-fruit := fruits.ChooseRandom()
-
-log.Printf(`Chose "%s"`, fruit)
-result, err := fruits.Eat(fruit)
-
-if err != nil {
-	log.Printf(`Error eating "%s": %v`, err, fruit)
-	w.Write([]byte(fmt.Sprintf(`failed eating "%s": "%s"`, fruit, err)))
-	return
-}
-
-log.Printf(`Yum "%s", %s`, fruit, result)
-	w.Write([]byte(fmt.Sprintf(`ate "%s": "%s"`, fruit, result)))
-})
-```
-
----
-
-Still hard to follow!
-
-```log
-2018/01/08 18:57:35 Choosing fruit to eat
-2018/01/08 18:57:35 Chose "apple"
-2018/01/08 18:57:35 Yum "pear", alright
-2018/01/08 18:57:35 Yum "banana", nice
-2018/01/08 18:57:35 Yum "pear", alright
-2018/01/08 18:57:35 Choosing fruit to eat
-2018/01/08 18:57:35 Choosing fruit to eat
-2018/01/08 18:57:35 Chose "apple"
-2018/01/08 18:57:35 Choosing fruit to eat
-2018/01/08 18:57:35 Error eating "coal": can't eat coal
-2018/01/08 18:57:35 Choosing fruit to eat
-2018/01/08 18:57:35 Yum "apple", good
-```
-
----
-
-Let's add a unique ID to indentify each request
+Fix? Let's add some context!
 
 ```Go
 r := chi.NewRouter()
@@ -268,6 +263,16 @@ log.Printf("...", reqID, param1, param2, ...)
 
 ---
 
+Fix?
+
+Encapsulate context into Logger object!
+
+---
+
+No reason to do it ourselves!
+
+---
+
 ```Go
 import (
     "github.com/rs/zerolog"
@@ -316,7 +321,61 @@ log.Printf(`Yum %s`, result)
 
 ---
 
-Loggers are dependencies
+The problem is fixed!
+
+```Go
+log := log.With().Str("reqID", reqID).Str("fruit", friut).Logger()
+...
+log.Print("...")
+...
+log.Print("...")
+...
+log.Print("...")
+...
+log.Print("...")
+```
+
+---
+
+```Go
+reqID := middleware.GetReqID(r.Context())
+log := log.With().Str("reqID", reqID).Logger()
+log.Info().Msg("Choosing")
+fruit := fruits.ChooseRandom()
+
+log = log.With().Str("fruit", fruit).Logger()
+log.Info().Msg("Chosen")
+result, err := fruits.Eat(fruit)
+
+if err != nil {
+    log.Error().Err(err).Msg("Failed")
+    w.Write([]byte(fmt.Sprintf(`failed eating "%s": "%s"`, fruit, err)))
+    return
+}
+
+log.Info().Str("result", result).Msg("Yum")
+```
+
+---
+
+```log
+2018-01-10T16:05:28+02:00 |INFO| Chosen fruit=pear reqID=macbook482/Den25LwiVD-002995
+2018-01-10T16:05:28+02:00 |INFO| Chosen fruit=pear reqID=macbook482/Den25LwiVD-002989
+2018-01-10T16:05:28+02:00 |INFO| Yum fruit=banana reqID=macbook482/Den25LwiVD-002977 result=nice
+2018-01-10T16:05:28+02:00 |INFO| Yum fruit=banana reqID=macbook482/Den25LwiVD-002974 result=nice
+2018-01-10T16:05:28+02:00 |INFO| Chosen fruit=pear reqID=macbook482/Den25LwiVD-002996
+2018-01-10T16:05:28+02:00 |INFO| Chosen fruit=pear reqID=macbook482/Den25LwiVD-002990
+2018-01-10T16:05:28+02:00 |INFO| Chosen fruit=banana reqID=macbook482/Den25LwiVD-002994
+2018-01-10T16:05:28+02:00 |INFO| Yum fruit=pear reqID=macbook482/Den25LwiVD-002985 result=alright
+2018-01-10T16:05:28+02:00 |ERRO| Failed error="can't eat coal" fruit=coal reqID=macbook482/Den25LwiVD-002978
+2018-01-10T16:05:28+02:00 |INFO| Yum fruit=banana reqID=macbook482/Den25LwiVD-002984 result=nice
+2018-01-10T16:05:28+02:00 |INFO| Yum fruit=apple reqID=macbook482/Den25LwiVD-002981 result=good
+2018-01-10T16:05:28+02:00 |INFO| Yum fruit=apple reqID=macbook482/Den25LwiVD-002979 result=good
+```
+
+---
+
+### Loggers are dependencies
 
 ---
 
@@ -325,13 +384,27 @@ Loggers are dependencies
 
 ---
 
-![clean](./images/clean-arch.jpg)
+![layers](./images/layers.png)
 
 ---
 
 ```Go
 import "github.com/pkg/errors"
 ```
+
+---
+
+```Go
+func New(message string) error
+
+func Errorf(format string, args ...interface{}) error
+
+func Wrap(err error, message string) error
+
+func Wrapf(err error, format string, args ...interface{}) error
+```
+
+---
 
 ```Go
 func Download(url string) ([]byte, error) {
@@ -391,7 +464,7 @@ Next step? JSON logs!
 
 ---
 
-Why ?
+### Why ?
 
 - easy to load to 3rd party solution like Loggly, Splunk, etc.
 - can be used for advanced shell filtering using tools like JQ
@@ -410,12 +483,11 @@ Loggly:
 
 ---
 
-Which library to choose?
+### Which library to choose?
 
 ---
 
-APIs
-====
+### APIs
 
 ---
 
@@ -464,8 +536,7 @@ sublogger.WithField("param2", "value2").Info("hello world")
 
 ---
 
-Benchmarks
-==========
+### Benchmarks
 
 ---
 
@@ -509,181 +580,19 @@ GitHub stats
 
 ---
 
+Recap:
+
+- log consistently & provide context
+- limit logging to one of the top application layers
+- bubble errors up the stack to this layer
+- choose one logging library and stick with it
+- have fun
+
+---
+
 Thank you
 =========
 
 ---
 
-Questions?
-
----
-
-Logging in Python
-=================
-
----
-
-Principles
-
-- Easy to reconfigure (DRY principle)
-- Easy to read & navigate
-
----
-
-Loggers are hierarchical:
-
-![pylog1](./images/pylog1.png)
-
----
-
-```bash
-$ ls
-child1.py	child2.py	main.py
-```
-
----
-
-main.py:
-
-```Python
-import logging
-
-logging.basicConfig()
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.DEBUG)
-
-import child1
-import child2
-```
-
----
-
-child1.py:
-
-```Python
-import logging
-
-LOG = logging.getLogger(__name__)
-
-LOG.debug('hello debug')
-LOG.info('hello info')
-LOG.warning('hello warning')
-LOG.error('hello error')
-```
-
----
-
-child2.py:
-
-```Python
-import logging
-
-LOG = logging.getLogger(__name__)
-
-LOG.debug('hello debug')
-LOG.info('hello info')
-LOG.warning('hello warning')
-LOG.error('hello error')
-```
-
----
-
-```bash
-$ python main.py
-DEBUG:child1:hello debug
-INFO:child1:hello info
-WARNING:child1:hello warning
-ERROR:child1:hello error
-DEBUG:child2:hello debug
-INFO:child2:hello info
-WARNING:child2:hello warning
-ERROR:child2:hello error
-```
-
----
-
-main.py:
-```Python
-root_logger.setLevel(logging.WARNING)
-```
-
-output:
-
-```bash
-$ python main.py
-WARNING:child1:hello warning
-ERROR:child1:hello error
-WARNING:child2:hello warning
-ERROR:child2:hello error
-```
-
----
-
-main.py:
-```Python
-logging.getLogger('child2').setLevel(logging.WARNING)
-```
-
-output:
-
-```bash
-$ python main.py
-DEBUG:child1:hello debug
-INFO:child1:hello info
-WARNING:child1:hello warning
-ERROR:child1:hello error
-WARNING:child2:hello warning
-ERROR:child2:hello error
-```
-
----
-
-![pylog2](./images/pylog2.png)
-
----
-
-![pylog3](./images/pylog3.png)
-
----
-
-Was used:
-
-```Python
-logging.info('I am using root logger')
-```
-
-Which is equal to:
-
-```Python
-root_logger = logging.getLogger()
-root_logger.info('I am using root logger')
-```
-
-Should've used:
-
-```Python
-LOG = logging.getLogger(__name__)
-LOG.info('I am using my logger')
-```
-
----
-
-Hard to reconfigure!
-
----
-
-Was used:
-
-```Python
-logging.info('setting user permissions')
-```
-
-Should've used:
-
-```Python
-LOG.info('[requestID=%s] [sessionID=%s] setting user permissions' % (requestID, sessionID))
-```
-
----
-
-Hard to read & navigate!
+### Questions?

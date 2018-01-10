@@ -9,7 +9,7 @@ func ChooseRandom() string {
 		{100, "apple"},
 		{70, "banana"},
 		{70, "pear"},
-		{10, "coal"},
+		{20, "coal"},
 	})
 	if err != nil {
 		panic(err)
